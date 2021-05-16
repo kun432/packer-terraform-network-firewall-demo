@@ -93,6 +93,7 @@ resource "aws_networkfirewall_logging_configuration" "firewall" {
     log_destination_config {
       log_destination = {
         bucketName = var.nwfw_log_bucket
+        prefix = "nwfw"
       }
       log_destination_type = "S3"
       log_type             = "ALERT"
@@ -185,14 +186,13 @@ resource "aws_subnet" "subnet_private_d" {
 
 resource "aws_route_table" "rtb_igw" {
   vpc_id = aws_vpc.vpc.id
-
   route {
-    cidr_block = aws_subnet.subnet_private_c.cidr_block
+    cidr_block = aws_subnet.subnet_protected_c.cidr_block
     vpc_endpoint_id = element([for ss in tolist(aws_networkfirewall_firewall.firewall.firewall_status[0].sync_states) : ss.attachment[0].endpoint_id if ss.attachment[0].subnet_id == aws_subnet.subnet_firewall_c.id], 0)
   }
   
   route {
-    cidr_block = aws_subnet.subnet_private_d.cidr_block
+    cidr_block = aws_subnet.subnet_protected_d.cidr_block
     vpc_endpoint_id = element([for ss in tolist(aws_networkfirewall_firewall.firewall.firewall_status[0].sync_states) : ss.attachment[0].endpoint_id if ss.attachment[0].subnet_id == aws_subnet.subnet_firewall_d.id], 0)
   }
 
