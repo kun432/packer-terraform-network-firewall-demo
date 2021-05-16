@@ -1,6 +1,7 @@
 variable "prj_name" {}
 variable "region" {}
 variable "vpc_cidr" {}
+variable "nwfw_log_bucket" {}
 
 resource "aws_vpc" "vpc" {
   cidr_block                       = var.vpc_cidr
@@ -35,12 +36,33 @@ resource "aws_subnet" "subnet_firewall_d" {
   }
 }
 
+resource "aws_networkfirewall_rule_group" "ips" {
+  capacity = 100
+  name     = "ips"
+  type     = "STATEFUL"
+  rule_group  {
+    rules_source {
+      rules_string = templatefile("${path.module}/rules/sample-emerging-web_server.rules.tpl", {
+                        "EXTERNAL_NET" = "0.0.0.0/0",
+                        "HOME_NET" = var.vpc_cidr,
+                        "HTTP_PORTS" = "[80,443]"
+                      })
+    }
+  }
+  tags = {
+    Name = "${var.prj_name}-nwfw-rules-ips"
+  }
+}
+
 resource "aws_networkfirewall_firewall_policy" "firewall" {
   name = "${var.prj_name}-firewall-policy"
 
   firewall_policy {
-    stateless_default_actions          = ["aws:pass"]
-    stateless_fragment_default_actions = ["aws:pass"]
+    stateless_default_actions          = ["aws:forward_to_sfe"]
+    stateless_fragment_default_actions = ["aws:forward_to_sfe"]
+    stateful_rule_group_reference {
+      resource_arn = aws_networkfirewall_rule_group.ips.arn
+    }
   }
 
   tags = {
@@ -65,6 +87,19 @@ resource "aws_networkfirewall_firewall" "firewall" {
   }
 }
 
+resource "aws_networkfirewall_logging_configuration" "firewall" {
+  firewall_arn = aws_networkfirewall_firewall.firewall.arn
+  logging_configuration {
+    log_destination_config {
+      log_destination = {
+        bucketName = var.nwfw_log_bucket
+      }
+      log_destination_type = "S3"
+      log_type             = "ALERT"
+    }
+  }
+}
+
 # Internet Gateway
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.vpc.id
@@ -75,23 +110,23 @@ resource "aws_internet_gateway" "igw" {
 
 
 # NAT Segment
-resource "aws_subnet" "subnet_nat_c" {
+resource "aws_subnet" "subnet_protected_c" {
   vpc_id            = aws_vpc.vpc.id
   cidr_block        = cidrsubnet(aws_vpc.vpc.cidr_block, 8, 2)
   availability_zone = "${var.region}c"
 
   tags = {
-    Name = "${var.prj_name}-subnet-nat-c"
+    Name = "${var.prj_name}-subnet-protected-c"
   }
 }
 
-resource "aws_subnet" "subnet_nat_d" {
+resource "aws_subnet" "subnet_protected_d" {
   vpc_id            = aws_vpc.vpc.id
   cidr_block        = cidrsubnet(aws_vpc.vpc.cidr_block, 8, 3)
   availability_zone = "${var.region}d"
 
   tags = {
-    Name = "${var.prj_name}-subnet-nat-d"
+    Name = "${var.prj_name}-subnet-protected-d"
   }
 }
 
@@ -111,7 +146,7 @@ resource "aws_eip" "eip_natgw_d" {
 
 resource "aws_nat_gateway" "natgw_c" {
   allocation_id = aws_eip.eip_natgw_c.id
-  subnet_id     = aws_subnet.subnet_nat_c.id
+  subnet_id     = aws_subnet.subnet_protected_c.id
 
   tags = {
     Name = "${var.prj_name}-natgw-c"
@@ -120,7 +155,7 @@ resource "aws_nat_gateway" "natgw_c" {
 
 resource "aws_nat_gateway" "natgw_d" {
   allocation_id = aws_eip.eip_natgw_d.id
-  subnet_id     = aws_subnet.subnet_nat_d.id
+  subnet_id     = aws_subnet.subnet_protected_d.id
 
   tags = {
     Name = "${var.prj_name}-natgw-d"
@@ -194,7 +229,7 @@ resource "aws_route_table_association" "rtb_assoc_firewall_d" {
   subnet_id      = aws_subnet.subnet_firewall_d.id
 }
 
-resource "aws_route_table" "rtb_nat_c" {
+resource "aws_route_table" "rtb_protected_c" {
   vpc_id = aws_vpc.vpc.id
 
   route {
@@ -203,11 +238,11 @@ resource "aws_route_table" "rtb_nat_c" {
   }
 
   tags = {
-    Name = "${var.prj_name}-rtb-nat-c"
+    Name = "${var.prj_name}-rtb-protected-c"
   }
 }
 
-resource "aws_route_table" "rtb_nat_d" {
+resource "aws_route_table" "rtb_protected_d" {
   vpc_id = aws_vpc.vpc.id
 
   route {
@@ -216,17 +251,17 @@ resource "aws_route_table" "rtb_nat_d" {
   }
 
   tags = {
-    Name = "${var.prj_name}-rtb-nat-d"
+    Name = "${var.prj_name}-rtb-protected-d"
   }
 }
-resource "aws_route_table_association" "rtb_assoc_nat_c" {
-  route_table_id = aws_route_table.rtb_nat_c.id
-  subnet_id      = aws_subnet.subnet_nat_c.id
+resource "aws_route_table_association" "rtb_assoc_protected_c" {
+  route_table_id = aws_route_table.rtb_protected_c.id
+  subnet_id      = aws_subnet.subnet_protected_c.id
 }
 
-resource "aws_route_table_association" "rtb_assoc_nat_d" {
-  route_table_id = aws_route_table.rtb_nat_d.id
-  subnet_id      = aws_subnet.subnet_nat_d.id
+resource "aws_route_table_association" "rtb_assoc_protected_d" {
+  route_table_id = aws_route_table.rtb_protected_d.id
+  subnet_id      = aws_subnet.subnet_protected_d.id
 }
 
 resource "aws_route_table" "rtb_private_c" {
@@ -247,7 +282,7 @@ resource "aws_route_table" "rtb_private_d" {
 
   route {
     cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.natgw_c.id
+    nat_gateway_id = aws_nat_gateway.natgw_d.id
   }
 
   tags = {
@@ -261,27 +296,11 @@ resource "aws_route_table_association" "rtb_assoc_private_c" {
 }
 
 resource "aws_route_table_association" "rtb_assoc_private_d" {
-  route_table_id = aws_route_table.rtb_private_c.id
+  route_table_id = aws_route_table.rtb_private_d.id
   subnet_id      = aws_subnet.subnet_private_d.id
 }
 
 output vpc_id { value = aws_vpc.vpc.id }
 output vpc_cidr { value = aws_vpc.vpc.cidr_block }
-output firewall_subnet_id_c { value = aws_subnet.subnet_firewall_c.id }
-output firewall_subnet_id_d { value = aws_subnet.subnet_firewall_d.id }
-output firewall_subnet_ids  { value = [ aws_subnet.subnet_firewall_c.id, aws_subnet.subnet_firewall_d.id ] }
-output nat_subnet_id_c { value = aws_subnet.subnet_nat_c.id }
-output nat_subnet_id_d { value = aws_subnet.subnet_nat_d.id }
-output nat_subnet_ids  { value = [ aws_subnet.subnet_nat_c.id, aws_subnet.subnet_nat_d.id ] }
-output private_subnet_id_c { value = aws_subnet.subnet_private_c.id }
-output private_subnet_id_d { value = aws_subnet.subnet_private_d.id }
 output private_subnet_ids  { value = [ aws_subnet.subnet_private_c.id, aws_subnet.subnet_private_d.id ] }
-output igw_rtb_id       { value = aws_route_table.rtb_igw.id }
-output firewall_rtb_id  { value = aws_route_table.rtb_firewall.id }
-output nat_rtb_id_c     { value = aws_route_table.rtb_nat_c.id }
-output nat_rtb_id_d     { value = aws_route_table.rtb_nat_d.id }
-output nat_rtb_ids      { value = [ aws_route_table.rtb_nat_c.id, aws_route_table.rtb_nat_d.id ] }
-output private_rtb_id_c { value = aws_route_table.rtb_private_c.id }
-output private_rtb_id_d { value = aws_route_table.rtb_private_d.id }
-output private_rtb_ids  { value = [ aws_route_table.rtb_private_c.id, aws_route_table.rtb_private_d.id ] }
-
+output protected_subnet_ids  { value = [ aws_subnet.subnet_protected_c.id, aws_subnet.subnet_protected_d.id ] }
