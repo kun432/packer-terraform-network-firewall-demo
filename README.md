@@ -24,6 +24,14 @@ TerraformでAWSリソースを作成
 ```
 $ cd terraform
 $ cd envs/development
+```
+
+- VPC CIDRなど、カスタマイズする場合はvariables.tfを修正してください。
+- tfstateはS3に保存します。S3バケット名はbackend.tfを修正してください。
+
+適用
+
+```
 $ terraform init
 $ terraform plan
 $ terraform apply
