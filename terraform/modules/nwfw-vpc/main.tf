@@ -40,13 +40,31 @@ resource "aws_networkfirewall_rule_group" "ips" {
   capacity = 100
   name     = "ips"
   type     = "STATEFUL"
+  #rules    = file("${path.module}/rules/sample-rules.txt")
   rule_group  {
     rules_source {
-      rules_string = templatefile("${path.module}/rules/sample-emerging-web_server.rules.tpl", {
-                        "EXTERNAL_NET" = "0.0.0.0/0",
-                        "HOME_NET" = var.vpc_cidr,
-                        "HTTP_PORTS" = "[80,443]"
-                      })
+      rules_string = file("${path.module}/rules/sample-suricata-rules.txt")
+    }
+    rule_variables {
+      ip_sets {
+        key = "EXTERNAL_NET"
+        ip_set {
+          definition = ["0.0.0.0/0"]
+        }
+      }
+
+      ip_sets {
+        key = "HOME_NET"
+        ip_set {
+          definition = [var.vpc_cidr]
+        }
+      }
+      port_sets {
+        key = "HTTP_PORTS"
+        port_set {
+          definition = ["[80,443]"]
+        }
+      }
     }
   }
   tags = {

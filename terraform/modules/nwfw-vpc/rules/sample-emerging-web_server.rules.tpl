@@ -1,1 +1,0 @@
-alert tcp ${EXTERNAL_NET} any -> ${HOME_NET} ${HTTP_PORTS} (msg:"HTTP/HTTPS traffic detected"; sid:200001; rev:1;)
