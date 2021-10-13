@@ -25,3 +25,10 @@ variable "web_ami_id" {
 variable "web_instance_type" {
   default = "t2.micro"
 }
+
+variable "http_permit_ips" {
+  default = [
+    "1.1.1.1/32",
+    "8.8.8.8/32"
+  ]
+}
