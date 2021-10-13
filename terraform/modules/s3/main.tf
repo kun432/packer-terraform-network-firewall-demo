@@ -44,7 +44,7 @@ data "aws_iam_policy_document" "lb_log" {
   }
 }
 
-resource "aws_s3_bucket_policy" "alb_logs" {
+resource "aws_s3_bucket_policy" "nlb_logs" {
   bucket = aws_s3_bucket.lb_log.id
   policy = data.aws_iam_policy_document.lb_log.json
 }

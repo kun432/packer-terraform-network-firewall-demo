@@ -6,6 +6,7 @@ variable "vpc_id" {}
 variable "protected_sg_id" {}
 variable "private_sg_id" {}
 variable "protected_subnet_ids" {}
+variable "protected_subnet_cidrs" {}
 variable "private_subnet_ids" {}
 variable "lb_log_bucket" {}
 
@@ -29,6 +30,7 @@ resource "aws_autoscaling_group" "web" {
   health_check_grace_period = 60
   health_check_type         = "ELB"
   vpc_zone_identifier       = var.private_subnet_ids
+  target_group_arns         = [ aws_lb_target_group.web.arn ]
 
   launch_template {
     id      = aws_launch_template.web.id
@@ -47,39 +49,52 @@ resource "aws_autoscaling_group" "web" {
   }
 }
 
-resource "aws_lb" "web" {
-  name               = "${var.prj_name}-web-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [var.protected_sg_id] 
-  subnets            = var.protected_subnet_ids 
+resource "aws_eip" "nlb1" {
+  vpc      = true
+}
 
-  access_logs {
-    bucket  = var.lb_log_bucket
-    prefix  = "web-alb"
-    enabled = true
+resource "aws_eip" "nlb2" {
+  vpc      = true
+}
+
+resource "aws_lb" "web" {
+  name               = "${var.prj_name}-web-nlb"
+  internal           = false
+  load_balancer_type = "network"
+
+  subnet_mapping {
+    subnet_id     = var.protected_subnet_ids[0]
+    allocation_id = aws_eip.nlb1.id
   }
 
+  subnet_mapping {
+    subnet_id     = var.protected_subnet_ids[1]
+    allocation_id = aws_eip.nlb2.id
+  }
+#  access_logs {
+#    bucket  = var.lb_log_bucket
+#    prefix  = "web-nlb"
+#    enabled = true
+#  }
+
   tags = {
-    Name = "${var.prj_name}-web-alb"
+    Name = "${var.prj_name}-web-nlb"
   }
 }
 
 resource "aws_lb_target_group" "web" {
   # https://thaim.hatenablog.jp/entry/2021/01/11/004738
-  name     = "${var.prj_name}-web-tgtgrp-${substr(uuid(), 0, 6)}"
+  name     = "${var.prj_name}-tgtgrp-${substr(uuid(), 0, 3)}"
   port     = 80
-  protocol = "HTTP"
+  protocol = "TCP"
   vpc_id   = var.vpc_id
   
   health_check {
     interval            = 30
-    path                = "/index.html"
     port                = 80
-    protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 2
-    matcher             = 200
+    protocol            = "TCP"
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
   } 
 
   lifecycle {
@@ -91,7 +106,7 @@ resource "aws_lb_target_group" "web" {
 resource "aws_lb_listener" "web" {
   load_balancer_arn = aws_lb.web.arn
   port              = "80"
-  protocol          = "HTTP"
+  protocol          = "TCP"
 
   default_action {
     type             = "forward"
@@ -99,7 +114,4 @@ resource "aws_lb_listener" "web" {
   }
 }
 
-resource "aws_autoscaling_attachment" "asg_attachment" {
-  autoscaling_group_name = aws_autoscaling_group.web.id
-  alb_target_group_arn   = aws_lb_target_group.web.arn
-}
+output http_private_ips  { value = [ "${aws_eip.nlb1.private_ip}/32", "${aws_eip.nlb2.private_ip}/32" ] }

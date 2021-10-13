@@ -3,6 +3,8 @@ variable "region" {}
 variable "vpc_cidr" {}
 variable "nwfw_log_bucket" {}
 
+variable "http_permit_ips" {}
+variable "http_private_ips" {}
 resource "aws_vpc" "vpc" {
   cidr_block                       = var.vpc_cidr
   enable_dns_hostnames             = true
@@ -59,10 +61,25 @@ resource "aws_networkfirewall_rule_group" "ips" {
           definition = [var.vpc_cidr]
         }
       }
+      ip_sets {
+        key = "HTTP_NET"
+        ip_set {
+          definition = var.http_private_ips
+        }
+      }
+
+      ip_sets {
+        key = "HTTP_PERMIT_NET"
+
+        ip_set {
+          definition = var.http_permit_ips
+        }
+      }
       port_sets {
         key = "HTTP_PORTS"
         port_set {
-          definition = ["[80,443]"]
+          #definition = ["[80,443]"]
+          definition = [ "80", "443" ]
         }
       }
     }
@@ -322,3 +339,4 @@ output vpc_id { value = aws_vpc.vpc.id }
 output vpc_cidr { value = aws_vpc.vpc.cidr_block }
 output private_subnet_ids  { value = [ aws_subnet.subnet_private_c.id, aws_subnet.subnet_private_d.id ] }
 output protected_subnet_ids  { value = [ aws_subnet.subnet_protected_c.id, aws_subnet.subnet_protected_d.id ] }
+output protected_subnet_cidrs  { value = [ aws_subnet.subnet_protected_c.cidr_block, aws_subnet.subnet_protected_d.cidr_block ] }
