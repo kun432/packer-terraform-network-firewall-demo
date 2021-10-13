@@ -1,6 +1,6 @@
 # packer-terraform-network-firewall-demo
 
-Packer/Teraformを使ったALB+Auto Scaling構成にAWS Network Firewallを追加したデモです。
+Packer/Teraformを使ったNLB+Auto Scaling構成にAWS Network Firewallを追加したデモです。
 
 ## Usage
 
@@ -37,7 +37,7 @@ $ terraform plan
 $ terraform apply
 ```
 
-- ALBのDNS名でアクセスしてWebサーバが見えればOK。あとはNetwork Firewallをいろいろいじってみてください。
+- ホワイトリストからのアクセスのみを許可するIPSルールを入れてあります。variables.tfのhttp_permit_ipsに自分のIPアドレスを指定すればアクセス可能です。
 - EC2インスタンスはSession Managerを有効にしてあるので、SSHは不要で、マネジメントコンソールからログイン可能。
 
 削除
